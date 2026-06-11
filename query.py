@@ -53,20 +53,86 @@ def get_times(service_id, date):
 def book_appointment(user_id, slot_id):
     conn, cursor  = connect()
 
-    cursor.execute("INSERT INTO appointments (user_id, slot_id) VALUES (?, ?)", (user_id, slot_id))
+    cursor.execute("INSERT INTO appointments (user_id, slot_id, status) VALUES (?, ?, 'pending')", (user_id, slot_id))
+    appointment_id = cursor.lastrowid
+    cursor.execute("UPDATE slots SET status = 'pending' WHERE slot_id = ?", (slot_id,))
     
+    conn.commit()
+    conn.close()
+    return appointment_id
+
+
+def get_appointment_by_id(appointment_id):
+    conn, cursor = connect()
+    cursor.execute("""
+        SELECT a.appointment_id, a.user_id, a.slot_id, a.status,
+               s.date, s.time, sv.name as service_name, sv.admin_id,
+               u.username
+        FROM appointments a
+        JOIN slots s ON a.slot_id = s.slot_id
+        JOIN services sv ON s.service_id = sv.service_id
+        JOIN users u ON a.user_id = u.user_id
+        WHERE a.appointment_id = ?
+    """, (appointment_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            'appointment_id': row[0],
+            'user_id': row[1],
+            'slot_id': row[2],
+            'status': row[3],
+            'date': row[4],
+            'time': row[5],
+            'service_name': row[6],
+            'admin_id': row[7],
+            'username': row[8]
+        }
+    return None
+
+
+def confirm_appointment(appointment_id):
+    conn, cursor = connect()
+    cursor.execute("UPDATE appointments SET status = 'confirmed' WHERE appointment_id = ?", (appointment_id,))
+    cursor.execute("""
+        UPDATE slots SET status = 'booked' 
+        WHERE slot_id = (SELECT slot_id FROM appointments WHERE appointment_id = ?)
+    """, (appointment_id,))
     conn.commit()
     conn.close()
 
 
+def reject_appointment(appointment_id):
+    conn, cursor = connect()
+    cursor.execute("UPDATE appointments SET status = 'rejected' WHERE appointment_id = ?", (appointment_id,))
+    cursor.execute("""
+        UPDATE slots SET status = 'available' 
+        WHERE slot_id = (SELECT slot_id FROM appointments WHERE appointment_id = ?)
+    """, (appointment_id,))
+    conn.commit()
+    conn.close()
 
 
+def get_pending_appointments(admin_id):
+    conn, cursor = connect()
+    cursor.execute("""
+        SELECT a.appointment_id, s.date, s.time, sv.name, u.username
+        FROM appointments a
+        JOIN slots s ON a.slot_id = s.slot_id
+        JOIN services sv ON s.service_id = sv.service_id
+        JOIN users u ON a.user_id = u.user_id
+        WHERE sv.admin_id = ? AND a.status = 'pending'
+        ORDER BY s.date, s.time
+    """, (admin_id,))
+    results = cursor.fetchall()
+    conn.close()
+    return results
 
 
 def get_user_appointments(user_id):
     conn, cursor  = connect()
     cursor.execute("""
-        SELECT s.date, s.time, sv.name
+        SELECT s.date, s.time, sv.name, a.status
         FROM appointments a
         JOIN slots s ON a.slot_id = s.slot_id
         JOIN services sv ON s.service_id = sv.service_id
@@ -77,10 +143,11 @@ def get_user_appointments(user_id):
     conn.close()
     return results
 
+
 def get_admin_appointments(admin_id):
     conn, cursor  = connect()
     cursor.execute("""
-        SELECT s.date, s.time, sv.name, u.username
+        SELECT s.date, s.time, sv.name, u.username, a.status
         FROM appointments a
         JOIN slots s ON a.slot_id = s.slot_id
         JOIN services sv ON s.service_id = sv.service_id
@@ -102,10 +169,10 @@ def insert_slots(service_id, date, times):
     conn.commit()
     conn.close()
 
-def update_slot_status(slot_id):
+def update_slot_status(slot_id, status='booked'):
     conn, cursor  = connect()
     
-    cursor.execute("UPDATE slots SET status = 'booked' WHERE slot_id = ?", (slot_id,))
+    cursor.execute("UPDATE slots SET status = ? WHERE slot_id = ?", (status, slot_id))
     
     conn.commit()
     conn.close()

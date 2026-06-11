@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS services (
 )
 """)
 
-
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS slots (
     slot_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +37,8 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS appointments (
     appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
-    slot_id INTEGER
+    slot_id INTEGER,
+    status TEXT DEFAULT 'pending'
 )
 """)
 
